@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Tablero Digital de Objetos Perdidos de la Facultad - Universidad Nacional de Santiago del Estero (UNSE)." />
+  <title>Tablero de Objetos Perdidos | UNSE</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Enlace de salto directo para accesibilidad por teclado (WCAG 2.1 AA) -->
+  <a href="#galeria-objetos" class="skip-link">Saltar al listado de objetos</a>
+
+  <!-- 1. CABECERA PRINCIPAL CON BARRA DE SESIÓN Y ROLES -->
+  <header class="app-header">
+    <div class="container">
+      <!-- Barra superior de sesión de usuario / Administrador -->
+      <div class="session-topbar">
+        <span class="brand-badge">UNSE · Comunidad Universitaria</span>
+
+        <!-- Estado: Sin sesión iniciada -->
+        <div id="vista-no-autenticado" class="session-actions">
+          <span class="session-hint">Modo visitante (solo lectura)</span>
+          <button type="button" id="btn-abrir-auth" class="btn btn-session-login">
+            👤 Ingresar / Registrarse
+          </button>
+        </div>
+
+        <!-- Estado: Usuario o Admin autenticado -->
+        <div id="vista-autenticado" class="session-actions" hidden>
+          <div class="user-chip">
+            <span id="badge-rol-usuario" class="role-badge">Estudiante</span>
+            <strong id="nombre-usuario-activo">Usuario</strong>
+            <span id="facultad-usuario-activo" class="user-faculty"></span>
+          </div>
+          <button type="button" id="btn-abrir-admin" class="btn btn-admin-panel" hidden>
+            ⚙️ Configurar Sistema
+          </button>
+          <button type="button" id="btn-cerrar-sesion" class="btn btn-session-logout">
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+
+      <div class="header-content">
+        <div class="brand">
+          <h1 class="app-title">Tablero de Objetos Perdidos</h1>
+          <p class="app-subtitle">
+            Consultá objetos encontrados, reportá un hallazgo o solicitá la devolución verificada
+          </p>
+        </div>
+
+        <!-- Botón de acción principal siempre visible (cumple mínimo 44x44px en CSS) -->
+        <button
+          type="button"
+          id="btn-abrir-publicar"
+          class="btn btn-primary btn-publish-cta"
+          aria-haspopup="dialog"
+          aria-controls="modal-publicar"
+        >
+          <span aria-hidden="true">+</span> Encontré un objeto
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 2. SECCIÓN DE BÚSQUEDA Y FILTRADO RÁPIDO (Eficiencia < 30s para localizar) -->
+  <section class="filters-section" aria-label="Herramientas de búsqueda y filtrado">
+    <div class="container">
+      <!-- Resumen rápido de estados del tablero (Pendientes, Reclamos y Entregados) -->
+      <div class="stats-bar" role="region" aria-label="Resumen de estados del tablero">
+        <button type="button" id="stat-pendientes" class="stat-pill stat-pill-warning" title="Ver objetos pendientes de retiro">
+          ⏳ <strong id="num-pendientes">0</strong> Pendientes de retiro
+        </button>
+        <button type="button" id="stat-reclamos" class="stat-pill stat-pill-claim" title="Ver objetos con solicitud de devolución pendiente">
+          🙋‍♂️ <strong id="num-reclamos">0</strong> Con reclamo a verificar
+        </button>
+        <button type="button" id="stat-recuperados" class="stat-pill stat-pill-success" title="Ver objetos ya entregados a sus dueños">
+          ✅ <strong id="num-recuperados">0</strong> Entregados
+        </button>
+      </div>
+
+      <!-- Barra de Actividad Personal (Visible cuando el usuario inicia sesión) -->
+      <div
+        id="barra-actividad-usuario"
+        class="user-activity-bar"
+        role="region"
+        aria-label="Filtros rápidos de mi actividad"
+        hidden
+      >
+        <span class="user-activity-label">👤 Mi actividad en la UNSE:</span>
+        <div class="user-activity-pills">
+          <button
+            type="button"
+            id="btn-filtro-mis-publicaciones"
+            class="activity-pill"
+            aria-pressed="false"
+          >
+            📢 <strong id="num-mis-publicaciones">0</strong> Mis publicaciones
+          </button>
+          <button
+            type="button"
+            id="btn-filtro-mis-reclamos"
+            class="activity-pill"
+            aria-pressed="false"
+          >
+            🙋‍♂️ <strong id="num-mis-reclamos">0</strong> Mis reclamos enviados
+          </button>
+          <button
+            type="button"
+            id="btn-quitar-filtro-personal"
+            class="btn-clear-personal"
+            hidden
+          >
+            ✕ Ver todos los objetos
+          </button>
+        </div>
+      </div>
+
+      <!-- Buscador por palabras clave, lugar o descripción -->
+      <div class="search-bar-wrapper">
+        <label for="input-busqueda" class="visually-hidden">
+          Buscar por objeto, descripción o lugar (ej. calculadora, Aula 12, biblioteca)
+        </label>
+        <input
+          type="search"
+          id="input-busqueda"
+          class="search-input"
+          placeholder="Buscar objeto, aula o descripción (ej. llaves, Aula 5, termo)..."
+          autocomplete="off"
+        />
+        <button
+          type="button"
+          id="btn-limpiar-busqueda"
+          class="btn-clear-search"
+          aria-label="Limpiar texto de búsqueda"
+          hidden
+        >
+          ✕
+        </button>
+      </div>
+
+      <!-- Filtros por Categoría Dinámicos (se actualizan si el Admin agrega categorías) -->
+      <div
+        id="contenedor-chips-categorias"
+        class="categories-wrapper"
+        role="group"
+        aria-label="Filtrar por categoría de objeto"
+      >
+        <!-- Inyectado dinámicamente por app.js -->
+      </div>
+
+      <!-- Filtros secundarios: Lugar encontrado, Lugar retiro, Estado y Fecha -->
+      <div class="secondary-filters">
+        <div class="filter-group">
+          <label for="select-lugar" class="filter-label">Lugar encontrado:</label>
+          <select id="select-lugar" class="filter-select">
+            <!-- Inyectado dinámicamente por app.js -->
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="select-retiro" class="filter-label">Dónde retirarlo:</label>
+          <select id="select-retiro" class="filter-select">
+            <!-- Inyectado dinámicamente por app.js -->
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="select-estado" class="filter-label">Estado:</label>
+          <select id="select-estado" class="filter-select">
+            <option value="todos">Todos los estados</option>
+            <option value="encontrado">⏳ Pendientes de retiro</option>
+            <option value="con_reclamo">🙋‍♂️ Con reclamo a verificar</option>
+            <option value="recuperado">✅ Entregados a su dueño</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="input-fecha-filtro" class="filter-label">Desde fecha:</label>
+          <input type="date" id="input-fecha-filtro" class="filter-input-date" />
+        </div>
+
+        <button type="button" id="btn-reset-filtros" class="btn btn-secondary btn-reset">
+          Restablecer
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. CONTENIDO PRINCIPAL: GALERÍA DE OBJETOS ENCONTRADOS -->
+  <main id="galeria-objetos" class="main-content container">
+    <div class="results-bar">
+      <p id="contador-resultados" class="results-count" aria-live="polite" aria-atomic="true">
+        Cargando objetos publicados...
+      </p>
+    </div>
+
+    <div id="grilla-objetos" class="objects-grid" role="region" aria-label="Listado de objetos encontrados">
+      <div id="estado-vacio" class="empty-state" hidden>
+        <p class="empty-state-title">No se encontraron objetos con esos filtros</p>
+        <p class="empty-state-text">
+          Probá buscando con otras palabras o presionando "Restablecer".
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       4. MODAL DE AUTENTICACIÓN, REGISTRO UNSE Y VERIFICACIÓN POR CORREO REAL
+       ======================================================================== -->
+  <dialog id="modal-auth" class="modal" aria-labelledby="titulo-modal-auth">
+    <div class="modal-content">
+      <header class="modal-header">
+        <div>
+          <h2 id="titulo-modal-auth" class="modal-title">Acceso a la Comunidad UNSE</h2>
+          <p class="modal-subtitle">
+            Iniciá sesión o creá tu cuenta verificada para publicar hallazgos o reclamar objetos.
+          </p>
+        </div>
+        <button type="button" id="btn-cerrar-auth" class="btn-icon-close" aria-label="Cerrar ventana de acceso">
+          ✕
+        </button>
+      </header>
+
+      <!-- Pestañas Login / Registro -->
+      <div id="tabs-auth" class="auth-tabs" role="tablist">
+        <button type="button" id="tab-btn-login" class="auth-tab active" role="tab" aria-selected="true">
+          Iniciar Sesión
+        </button>
+        <button type="button" id="tab-btn-registro" class="auth-tab" role="tab" aria-selected="false">
+          Crear Cuenta UNSE
+        </button>
+      </div>
+
+      <!-- VISTA 1: INICIAR SESIÓN -->
+      <form id="form-login" class="publish-form">
+        <div class="form-group">
+          <label for="login-correo" class="form-label">Correo electrónico *</label>
+          <input
+            type="email"
+            id="login-correo"
+            class="form-control"
+            placeholder="ejemplo@unse.edu.ar"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="login-password" class="form-label">Contraseña *</label>
+          <div class="password-input-wrapper">
+            <input
+              type="password"
+              id="login-password"
+              class="form-control"
+              placeholder="Ingresá tu contraseña"
+              required
+            />
+            <button
+              type="button"
+              class="btn-toggle-password"
+              data-target="login-password"
+              aria-label="Mostrar u ocultar contraseña"
+              aria-pressed="false"
+            >
+              👁️ Ver
+            </button>
+          </div>
+        </div>
+
+        <p id="error-login" class="form-error" role="alert" hidden></p>
+
+        <footer class="modal-footer">
+          <button type="submit" class="btn btn-primary" style="width: 100%;">
+            Ingresar al sistema
+          </button>
+        </footer>
+      </form>
+
+      <!-- VISTA 2: CREAR CUENTA DE USUARIO (Nombre, Apellido, Correo, Facultad UNSE, Carrera) -->
+      <form id="form-registro" class="publish-form" hidden novalidate>
+        <div class="form-row-equal">
+          <div class="form-group">
+            <label for="reg-nombre" class="form-label">Nombre *</label>
+            <input type="text" id="reg-nombre" class="form-control" placeholder="Ej. Valentín" required />
+          </div>
+          <div class="form-group">
+            <label for="reg-apellido" class="form-label">Apellido *</label>
+            <input type="text" id="reg-apellido" class="form-control" placeholder="Ej. Leiva" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-correo" class="form-label">Correo electrónico real (donde recibirás el código) *</label>
+          <input
+            type="email"
+            id="reg-correo"
+            class="form-control"
+            placeholder="tu.correo@gmail.com o @alu.unse.edu.ar"
+            required
+          />
+        </div>
+
+        <div class="form-row-equal">
+          <div class="form-group">
+            <label for="reg-facultad" class="form-label">Facultad de la UNSE *</label>
+            <select id="reg-facultad" class="form-control" required>
+              <option value="" disabled selected>Seleccioná tu facultad...</option>
+              <option value="FCEyT (Ciencias Exactas y Tecnologías)">FCEyT - Ciencias Exactas y Tecnologías</option>
+              <option value="FAyA (Agronomía y Agroindustrias)">FAyA - Agronomía y Agroindustrias</option>
+              <option value="FHCSyS (Humanidades, Cs. Sociales y Salud)">FHCSyS - Humanidades, Cs. Sociales y Salud</option>
+              <option value="FCF (Ciencias Forestales)">FCF - Ciencias Forestales</option>
+              <option value="FCM (Ciencias Médicas)">FCM - Ciencias Médicas</option>
+              <option value="Personal No Docente / Conserjería">Personal Administrativo / Conserjería</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="reg-carrera" class="form-label">Carrera que estudia / Rol *</label>
+            <input
+              type="text"
+              id="reg-carrera"
+              class="form-control"
+              placeholder="Ej. Lic. en Sistemas de Información"
+              required
+            />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-password" class="form-label">Crear contraseña (mín. 6 caracteres) *</label>
+          <div class="password-input-wrapper">
+            <input
+              type="password"
+              id="reg-password"
+              class="form-control"
+              placeholder="Mínimo 6 caracteres"
+              minlength="6"
+              required
+            />
+            <button
+              type="button"
+              class="btn-toggle-password"
+              data-target="reg-password"
+              aria-label="Mostrar u ocultar contraseña"
+              aria-pressed="false"
+            >
+              👁️ Ver
+            </button>
+          </div>
+        </div>
+
+        <p id="error-registro" class="form-error" role="alert" hidden></p>
+
+        <footer class="modal-footer">
+          <button type="submit" id="btn-submit-registro" class="btn btn-primary" style="width: 100%;">
+            Enviar código de verificación a mi correo
+          </button>
+        </footer>
+      </form>
+
+      <!-- VISTA 3: VERIFICACIÓN DE CUENTA (El código NO se muestra aquí; llega al correo del usuario) -->
+      <div id="vista-verificacion" class="publish-form" hidden>
+        <div class="email-sent-notice" role="region" aria-label="Aviso de envío de correo de verificación">
+          <div class="email-sent-header">
+            <span>📧 <strong>Revisá tu bandeja de correo electrónico</strong></span>
+            <span class="badge">Verificación requerida</span>
+          </div>
+          <p class="email-sent-body">
+            Hola <strong id="verif-nombre-destinatario">Usuario</strong>, enviamos un código secreto de 6 dígitos a la dirección:
+            <strong id="verif-correo-destinatario" class="email-highlight">correo@ejemplo.com</strong>
+          </p>
+          <p id="estado-envio-correo" class="email-status-detail">
+            Abrí tu correo (revisá también la carpeta de Spam o Promociones), copiá el código recibido y escribinoslo aquí abajo para activar tu cuenta.
+          </p>
+        </div>
+
+        <form id="form-verificar-codigo" class="verify-code-form">
+          <div class="form-group">
+            <label for="input-codigo-verificacion" class="form-label">
+              Código de 6 dígitos recibido en tu correo *
+            </label>
+            <input
+              type="text"
+              id="input-codigo-verificacion"
+              class="form-control code-input"
+              placeholder="_ _ _ _ _ _"
+              maxlength="6"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              required
+            />
+          </div>
+
+          <p id="error-verificacion" class="form-error" role="alert" hidden></p>
+
+          <div class="verify-actions">
+            <button type="button" id="btn-reenviar-codigo" class="btn btn-secondary">
+              🔄 Reenviar código al correo
+            </button>
+            <button type="submit" class="btn btn-success">
+              ✅ Validar código y activar cuenta
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ========================================================================
+       5. MODAL DE PUBLICACIÓN RÁPIDA Y EDICIÓN (Solo Usuarios Verificados o Admin)
+       ======================================================================== -->
+  <dialog id="modal-publicar" class="modal" aria-labelledby="titulo-modal-publicar">
+    <div class="modal-content">
+      <header class="modal-header">
+        <div>
+          <h2 id="titulo-modal-publicar" class="modal-title">Publicar objeto encontrado</h2>
+          <p id="publicador-actual-info" class="modal-subtitle">
+            Publicando como usuario verificado de la comunidad UNSE.
+          </p>
+        </div>
+        <button
+          type="button"
+          id="btn-cerrar-publicar"
+          class="btn-icon-close"
+          aria-label="Cerrar ventana de publicación"
+        >
+          ✕
+        </button>
+      </header>
+
+      <form id="form-publicar" class="publish-form" novalidate>
+        <!-- PASO 1: Fotografía del objeto -->
+        <fieldset class="form-section">
+          <legend class="form-legend">1. Fotografía del objeto (opcional)</legend>
+          <div class="photo-upload-area">
+            <label for="input-foto" class="btn btn-outline photo-upload-label">
+              📷 Tomar o subir foto del objeto
+            </label>
+            <input
+              type="file"
+              id="input-foto"
+              name="foto"
+              accept="image/*"
+              capture="environment"
+              class="visually-hidden"
+            />
+            <div id="preview-foto-container" class="photo-preview-container" hidden>
+              <img id="img-preview" src="" alt="Vista previa de la fotografía cargada" class="photo-preview" />
+              <button type="button" id="btn-quitar-foto" class="btn btn-secondary btn-small">
+                Quitar / Cambiar foto
+              </button>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- PASO 2: Categoría Dinámica (Toque 1) -->
+        <fieldset class="form-section">
+          <legend class="form-legend">2. ¿Qué tipo de objeto es? (Seleccioná una categoría) *</legend>
+          <div id="contenedor-radios-categorias" class="quick-select-grid" role="radiogroup" aria-required="true">
+            <!-- Inyectado dinámicamente por app.js según las categorías del sistema -->
+          </div>
+        </fieldset>
+
+        <!-- PASO 3: Lugar donde se encontró (Toque 2) -->
+        <div class="form-group">
+          <label for="input-lugar-encontrado" class="form-label">
+            3. ¿Dónde lo encontraste? *
+          </label>
+          <select id="input-lugar-encontrado" name="lugarEncontrado" class="form-control" required>
+            <!-- Inyectado dinámicamente por app.js -->
+          </select>
+        </div>
+
+        <!-- PASO 4: Lugar donde se dejó / dónde retirarlo (Toque 3) -->
+        <div class="form-group">
+          <label for="input-lugar-retiro" class="form-label">
+            4. ¿Dónde fue entregado para que lo retiren? *
+          </label>
+          <select id="input-lugar-retiro" name="lugarRetiro" class="form-control" required>
+            <!-- Inyectado dinámicamente por app.js -->
+          </select>
+        </div>
+
+        <!-- PASO 5: Título público y Observaciones del hallazgo -->
+        <div class="form-group">
+          <label for="input-titulo" class="form-label">
+            5. Nombre corto del objeto (visible en el tablero) *
+          </label>
+          <input
+            type="text"
+            id="input-titulo"
+            name="titulo"
+            class="form-control"
+            placeholder="Ej. Libreta universitaria / Cargador Samsung blanco tipo C"
+            maxlength="80"
+            required
+          />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="input-detalle-lugar" class="form-label">
+              Observaciones públicas del hallazgo (aula, horario)
+            </label>
+            <textarea
+              id="input-detalle-lugar"
+              name="descripcion"
+              class="form-control"
+              rows="2"
+              placeholder="Ej. Encontrado debajo del banco en el Aula 14 a las 10:30 hs."
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="input-fecha-encontrado" class="form-label">
+              Fecha del hallazgo *
+            </label>
+            <input
+              type="date"
+              id="input-fecha-encontrado"
+              name="fecha"
+              class="form-control"
+              required
+            />
+          </div>
+        </div>
+
+        <!-- PASO 6: Particularidades privadas para verificar al dueño (SOLO VISIBLE PARA ADMIN) -->
+        <div class="form-group secret-field-box">
+          <label for="input-particularidades-hallazgo" class="form-label">
+            6. 🔒 Particularidades privadas para verificar a su dueño (Oculto al público) *
+          </label>
+          <textarea
+            id="input-particularidades-hallazgo"
+            name="particularidadesHallazgo"
+            class="form-control"
+            rows="2"
+            placeholder="Ej. Está a nombre de Ramiro Sosa (Legajo 1234) / Tiene un sticker azul en el reverso / Marca y serie..."
+            required
+          ></textarea>
+          <small class="form-hint">
+            <strong>Dato secreto de seguridad:</strong> Esto <strong>NO aparecerá en el tablero público</strong>. Solo lo verá el Administrador para comprobar que quien venga a reclamar el objeto diga la verdad y sea la persona indicada.
+          </small>
+        </div>
+
+        <p id="mensaje-error-form" class="form-error" role="alert" hidden></p>
+
+        <footer class="modal-footer">
+          <button type="button" id="btn-cancelar-publicar" class="btn btn-secondary">
+            Cancelar
+          </button>
+          <button type="submit" id="btn-submit-publicar" class="btn btn-primary">
+            Publicar en el tablero
+          </button>
+        </footer>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- ========================================================================
+       6. MODAL DE DETALLE, RECLAMO CON PARTICULARIDADES Y ENTREGA VERIFICADA
+       ======================================================================== -->
+  <dialog id="modal-detalle" class="modal" aria-labelledby="detalle-titulo">
+    <div class="modal-content">
+      <header class="modal-header">
+        <span id="detalle-categoria-badge" class="badge">Categoría</span>
+        <button
+          type="button"
+          id="btn-cerrar-detalle"
+          class="btn-icon-close"
+          aria-label="Cerrar ventana de detalle"
+        >
+          ✕
+        </button>
+      </header>
+
+      <div class="detail-body">
+        <div id="contenedor-detalle-imagen" class="detail-image-wrapper">
+          <img
+            id="detalle-imagen"
+            src=""
+            alt=""
+            class="detail-image"
+            title="Hacé clic para ampliar o reducir la fotografía"
+          />
+          <button
+            type="button"
+            id="btn-zoom-imagen"
+            class="btn-zoom-image"
+            aria-label="Ampliar o reducir fotografía del objeto"
+          >
+            🔍 Ampliar foto
+          </button>
+          <span id="detalle-estado-badge" class="status-badge">Estado</span>
+        </div>
+
+        <h2 id="detalle-titulo" class="detail-title">Nombre del objeto</h2>
+        <p id="detalle-descripcion" class="detail-description"></p>
+
+        <dl class="detail-metadata">
+          <div class="metadata-item">
+            <dt>📍 Encontrado en:</dt>
+            <dd id="detalle-lugar-encontrado">-</dd>
+          </div>
+          <div class="metadata-item">
+            <dt>📅 Fecha de hallazgo:</dt>
+            <dd id="detalle-fecha">-</dd>
+          </div>
+          <div class="metadata-item highlight-box">
+            <dt>🏢 Dónde se encuentra resguardado:</dt>
+            <dd id="detalle-lugar-retiro">-</dd>
+          </div>
+          <div class="metadata-item">
+            <dt>👤 Reportado por:</dt>
+            <dd id="detalle-publicado-por">-</dd>
+          </div>
+        </dl>
+
+        <!-- ACCIÓN PARA EL AUTOR DE LA PUBLICACIÓN: VER SU SEÑA SECRETA Y EDITAR DATOS PROPIOS -->
+        <div id="caja-autor-publicacion" class="author-actions-box" hidden>
+          <div class="author-actions-info">
+            <strong>📢 Vos publicaste este objeto encontrado</strong>
+            <span id="autor-particularidad-secreta-texto"></span>
+            <span>Podés corregir la descripción, cambiar la foto, actualizar dónde quedó resguardado o editar la particularidad privada para el Admin.</span>
+          </div>
+          <button type="button" id="btn-editar-publicacion" class="btn btn-outline btn-small">
+            ✏️ Editar datos de mi publicación
+          </button>
+        </div>
+
+        <!-- CAJA INFORMATIVA CUANDO EL OBJETO YA FUE DEVUELTO A SU DUEÑO -->
+        <div id="caja-datos-entrega" class="delivery-verified-box" hidden>
+          <div class="delivery-verified-header">
+            <h3 class="delivery-verified-title">✅ Objeto entregado a la persona indicada</h3>
+            <button
+              type="button"
+              id="btn-imprimir-comprobante"
+              class="btn btn-outline btn-small btn-print-receipt"
+            >
+              📄 Imprimir comprobante (PDF)
+            </button>
+          </div>
+          <p id="texto-entregado-a"></p>
+          <p id="texto-particularidades-verificadas"></p>
+          <p id="texto-fecha-entrega" class="delivery-date-text"></p>
+        </div>
+
+        <!-- SECCIÓN PARA QUIEN PERDIÓ EL OBJETO: SOLICITAR DEVOLUCIÓN DEMOSTRANDO PARTICULARIDADES -->
+        <section id="seccion-reclamo-usuario" class="claim-section" aria-label="Solicitar devolución del objeto">
+          <!-- Comprobante visible solo para el usuario que ya envió un reclamo por este objeto -->
+          <div id="mi-reclamo-enviado-box" class="my-claim-status-box" hidden>
+            <h3 class="my-claim-title">📩 Ya enviaste una solicitud de devolución por este objeto</h3>
+            <p id="mi-reclamo-detalle-texto"></p>
+            <p class="my-claim-footer">
+              ⏳ <strong>Estado:</strong> Pendiente de verificación por el Administrador / Conserjería. Se comprobará si las particularidades que indicaste coinciden con las registradas al encontrar el objeto.
+            </p>
+            <button type="button" id="btn-editar-mi-reclamo" class="btn btn-secondary btn-small" style="align-self: flex-start; margin-top: 0.35rem;">
+              ✏️ Modificar mis particularidades o teléfono
+            </button>
+          </div>
+
+          <div id="banner-iniciar-reclamo" class="claim-info-banner">
+            <strong>🔒 ¿Perdiste este objeto? Verificación de dueño legítimo:</strong>
+            <p>
+              Todavía no sabemos de quién es. Para solicitar su devolución, debés especificar <strong>particularidades o señas exactas</strong> del objeto que solo su dueño conoce. El Administrador comparará tu respuesta con el objeto real antes de entregarlo.
+            </p>
+            <button type="button" id="btn-abrir-form-reclamo" class="btn btn-primary" style="margin-top: 0.65rem; width: 100%;">
+              🙋‍♂️ Solicitar devolución demostrando particularidades
+            </button>
+          </div>
+
+          <form id="form-reclamo" class="claim-form" hidden novalidate>
+            <h3 id="titulo-form-reclamo" class="claim-form-title">Demostrar propiedad del objeto perdido</h3>
+            <div class="form-group">
+              <label for="input-duenio-reclamo" class="form-label">
+                Nombre y Apellido de la persona dueña que retirará el objeto *
+              </label>
+              <input
+                type="text"
+                id="input-duenio-reclamo"
+                class="form-control"
+                placeholder="Ej. Ramiro Sosa (DNI / Legajo)"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="input-particularidades-reclamo" class="form-label">
+                ¿Qué particularidades o señas privadas tiene el objeto para comprobar que sos la persona indicada? *
+              </label>
+              <textarea
+                id="input-particularidades-reclamo"
+                class="form-control"
+                rows="3"
+                placeholder="Describí datos que no estén a simple vista en la publicación (nombre escrito adentro, número de legajo, llavero, marca, etc.)..."
+                required
+              ></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="input-contacto-reclamo" class="form-label">
+                Teléfono / WhatsApp de contacto (opcional)
+              </label>
+              <input
+                type="tel"
+                id="input-contacto-reclamo"
+                class="form-control"
+                placeholder="Ej. 385 4123456"
+              />
+            </div>
+
+            <p id="error-reclamo" class="form-error" role="alert" hidden></p>
+
+            <div class="claim-form-actions">
+              <button type="button" id="btn-cancelar-reclamo" class="btn btn-secondary">
+                Cancelar
+              </button>
+              <button type="submit" id="btn-submit-reclamo" class="btn btn-success">
+                Enviar solicitud a verificar
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- SECCIÓN EXCLUSIVA PARA EL ADMINISTRADOR: COMPARAR PARTICULARIDADES, APROBAR/RECHAZAR Y ENTREGAR -->
+        <section id="seccion-gestion-admin" class="admin-management-box" hidden aria-label="Panel de control del Administrador">
+          <div class="admin-box-header">
+            <span class="role-badge role-admin">🛡️ Exclusivo Administrador</span>
+            <h3 class="admin-box-title">Verificación de Particularidades y Devolución</h3>
+          </div>
+
+          <!-- Dato secreto dejado por quien encontró el objeto (Para que el Admin sepa qué verificar) -->
+          <div class="admin-secret-verification-box">
+            <div class="admin-secret-header">
+              <strong>🔒 Particularidad real del objeto (Oculta al público · Registrada al encontrarlo):</strong>
+              <button type="button" id="btn-admin-editar-secreto" class="btn btn-outline btn-small">
+                ✏️ Editar dato u objeto
+              </button>
+            </div>
+            <p id="admin-texto-particularidad-secreta" class="admin-secret-text">-</p>
+          </div>
+
+          <!-- Listado de solicitudes de reclamo enviadas por usuarios -->
+          <div class="admin-claims-container">
+            <h4 class="admin-subtitle">
+              Solicitudes de personas que reclaman este objeto (<span id="contador-reclamos-detalle">0</span>):
+            </h4>
+            <p class="form-hint" style="margin-bottom: 0.5rem;">
+              Compará lo que declara cada solicitante con la particularidad real del objeto antes de aprobar o rechazar:
+            </p>
+            <div id="lista-reclamos-admin" class="claims-list">
+              <!-- Inyectado por app.js -->
+            </div>
+          </div>
+
+          <!-- Formulario para que el Admin confirme la entrega a la persona indicada -->
+          <details id="details-entrega-manual" class="admin-manual-delivery">
+            <summary id="summary-entrega-manual" class="btn btn-outline btn-small" style="width: 100%;">
+              📝 Registrar devolución a la persona indicada (especificando dueño y particularidades)
+            </summary>
+            <form id="form-entrega-manual" class="claim-form" style="margin-top: 0.75rem;">
+              <div class="form-group">
+                <label for="admin-input-destinatario" class="form-label">
+                  Persona indicada a quien se le devuelve (Nombre, Apellido, Facultad / DNI) *
+                </label>
+                <input
+                  type="text"
+                  id="admin-input-destinatario"
+                  class="form-control"
+                  placeholder="Ej. Ramiro Sosa - FCEyT (DNI / Legajo verificado)"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label for="admin-input-particularidades" class="form-label">
+                  Particularidades comprobadas que demostraron que era suyo *
+                </label>
+                <textarea
+                  id="admin-input-particularidades"
+                  class="form-control"
+                  rows="2"
+                  placeholder="Ej. Comprobó con su DNI que la libreta estaba a nombre de Ramiro Sosa y coincidía el número de legajo."
+                  required
+                ></textarea>
+              </div>
+              <button type="submit" class="btn btn-success" style="width: 100%;">
+                ✅ Confirmar devolución a esta persona
+              </button>
+            </form>
+          </details>
+
+          <div class="admin-footer-actions">
+            <button type="button" id="btn-revertir-pendiente" class="btn btn-secondary" hidden>
+              ↩️ Volver a estado Pendiente
+            </button>
+            <button type="button" id="btn-eliminar-publicacion" class="btn btn-danger-outline">
+              🗑️ Eliminar publicación (Solo Admin)
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ========================================================================
+       7. MODAL EXCLUSIVO DE ADMINISTRADOR: CATEGORÍAS, LUGARES, USUARIOS Y CORREO
+       ======================================================================== -->
+  <dialog id="modal-admin" class="modal" aria-labelledby="titulo-modal-admin">
+    <div class="modal-content">
+      <header class="modal-header">
+        <div>
+          <span class="role-badge role-admin">🛡️ Panel de Configuración</span>
+          <h2 id="titulo-modal-admin" class="modal-title">Configuración del Sistema (Admin)</h2>
+          <p class="modal-subtitle">
+            Administrá categorías, sectores de la UNSE, usuarios registrados y el servicio de correos.
+          </p>
+        </div>
+        <button type="button" id="btn-cerrar-admin" class="btn-icon-close" aria-label="Cerrar panel de administrador">
+          ✕
+        </button>
+      </header>
+
+      <div class="publish-form">
+        <!-- 1. Agregar / Quitar Categorías -->
+        <section class="admin-config-section">
+          <h3 class="form-legend">1. Categorías de objetos del sistema</h3>
+          <form id="form-agregar-categoria" class="admin-inline-form">
+            <input
+              type="text"
+              id="input-nueva-cat-icono"
+              class="form-control input-icon-short"
+              placeholder="Ícono (ej. 🕶️)"
+              maxlength="4"
+              aria-label="Ícono o emoji para la categoría"
+            />
+            <input
+              type="text"
+              id="input-nueva-cat-nombre"
+              class="form-control"
+              placeholder="Nueva categoría (ej. Anteojos, DNI, Calculadoras)..."
+              required
+              aria-label="Nombre de la nueva categoría"
+            />
+            <button type="submit" class="btn btn-primary">
+              + Agregar
+            </button>
+          </form>
+          <div id="lista-admin-categorias" class="admin-tags-list"></div>
+        </section>
+
+        <!-- 2. Agregar / Quitar Lugares donde se encontró -->
+        <section class="admin-config-section">
+          <h3 class="form-legend">2. Lugares / Sectores donde se encuentran objetos</h3>
+          <form id="form-agregar-lugar" class="admin-inline-form">
+            <input
+              type="text"
+              id="input-nuevo-lugar"
+              class="form-control"
+              placeholder="Nuevo sector (ej. Polideportivo, Aula Magna, Decanato)..."
+              required
+              aria-label="Nombre del nuevo sector de hallazgo"
+            />
+            <button type="submit" class="btn btn-primary">
+              + Agregar
+            </button>
+          </form>
+          <div id="lista-admin-lugares" class="admin-tags-list"></div>
+        </section>
+
+        <!-- 3. Agregar / Quitar Lugares de entrega / retiro -->
+        <section class="admin-config-section">
+          <h3 class="form-legend">3. Puntos autorizados de entrega / retiro</h3>
+          <form id="form-agregar-retiro" class="admin-inline-form">
+            <input
+              type="text"
+              id="input-nuevo-retiro"
+              class="form-control"
+              placeholder="Nuevo punto de retiro (ej. Guardia Polideportivo)..."
+              required
+              aria-label="Nombre del nuevo punto de retiro"
+            />
+            <button type="submit" class="btn btn-primary">
+              + Agregar
+            </button>
+          </form>
+          <div id="lista-admin-retiros" class="admin-tags-list"></div>
+        </section>
+
+        <!-- 4. Configuración de Envío de Correo Real (EmailJS) -->
+        <section class="admin-config-section">
+          <h3 class="form-legend">4. Servicio de Correo Electrónico Real (EmailJS)</h3>
+          <p class="form-hint">
+            Credenciales activas para enviar el código de 6 dígitos al correo real de cada usuario.
+          </p>
+          <form id="form-config-email" class="email-config-form">
+            <div class="form-row-equal">
+              <div class="form-group">
+                <label for="input-emailjs-service" class="form-label">Service ID</label>
+                <input
+                  type="text"
+                  id="input-emailjs-service"
+                  class="form-control"
+                  placeholder="Ej. service_xxxxxxx"
+                />
+              </div>
+              <div class="form-group">
+                <label for="input-emailjs-template" class="form-label">Template ID</label>
+                <input
+                  type="text"
+                  id="input-emailjs-template"
+                  class="form-control"
+                  placeholder="Ej. template_xxxxxxx"
+                />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="input-emailjs-pubkey" class="form-label">Public Key</label>
+              <input
+                type="text"
+                id="input-emailjs-pubkey"
+                class="form-control"
+                placeholder="Ej. aBcDeFgHiJkLmNoPq"
+              />
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">
+              💾 Guardar configuración de correo real
+            </button>
+          </form>
+        </section>
+
+        <!-- 5. Listado de Usuarios Registrados de la Comunidad UNSE -->
+        <section class="admin-config-section">
+          <h3 class="form-legend">5. Usuarios registrados en la Comunidad UNSE (<span id="contador-admin-usuarios">0</span>)</h3>
+          <div id="lista-admin-usuarios" class="admin-users-list"></div>
+        </section>
+      </div>
+
+      <footer class="modal-footer" style="justify-content: space-between;">
+        <button type="button" id="btn-restaurar-demo" class="btn btn-danger-outline btn-small">
+          🔄 Restaurar datos iniciales de demostración
+        </button>
+        <button type="button" id="btn-cerrar-admin-footer" class="btn btn-secondary">
+          Cerrar panel
+        </button>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- 8. NOTIFICACIÓN DE CONFIRMACIÓN (Toast accesible) -->
+  <div
+    id="notificacion-toast"
+    class="toast-notification"
+    role="status"
+    aria-live="polite"
+    hidden
+  >
+    <span id="texto-toast">¡Operación realizada con éxito!</span>
+  </div>
+
+  <!-- Pie de página institucional (Sin botones destructivos para usuarios comunes) -->
+  <footer class="app-footer">
+    <div class="container footer-content">
+      <p>
+        <strong>Tablero Digital de Objetos Perdidos</strong> · Interacción Hombre Computador (2026) · UNSE
+      </p>
+      <span class="form-hint">Acceso administrado por Conserjería y Administración UNSE</span>
+    </div>
+  </footer>
+
+  <!-- Script principal de la lógica de la aplicación -->
+  <script src="app.js" defer></script>
+</body>
+</html>
